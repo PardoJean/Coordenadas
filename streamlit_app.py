@@ -205,14 +205,34 @@ tab1, tab2 = st.tabs(["📸 Procesar Imágenes", "📋 Pegar Coordenadas"])
 
 # TAB 1: Carga de imágenes
 with tab1:
-    st.subheader("1️⃣ Cargar o Arrastrar Imágenes")
-    st.info("💡 Puedes arrastrar imágenes directamente aquí o seleccionar del explorador")
+    st.subheader("1️⃣ Cargar, Arrastrar o Pegar Imágenes")
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.write("**Opción 1: Desde WhatsApp**")
+        st.markdown("""
+        1. Abre WhatsApp
+        2. Captura la pantalla con las coordenadas
+        3. Comparte o guarda la foto
+        4. Arrastra aquí ⬇️ o pega (Ctrl+V)
+        """)
+
+    with col_b:
+        st.write("**Opción 2: Desde tu computadora**")
+        st.markdown("""
+        1. Selecciona imágenes
+        2. Puedes elegir varias a la vez
+        3. O arrastra directamente
+        """)
+
+    st.info("💡 **El file_uploader soporta:**\n• Arrastar archivos\n• Seleccionar múltiples\n• Formatos: JPG, PNG, WebP")
 
     imagenes_subidas = st.file_uploader(
-        "Selecciona imágenes de topografía",
+        "Selecciona o arrastra imágenes de topografía",
         type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
-        help="Arrastra imágenes aquí o haz clic para seleccionar"
+        help="Arrastra imágenes desde WhatsApp, explorador, o haz clic para seleccionar"
     )
 
 # TAB 2: Pegar coordenadas
