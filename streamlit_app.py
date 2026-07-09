@@ -217,16 +217,37 @@ with tab1:
 
 # TAB 2: Pegar coordenadas
 with tab2:
-    st.subheader("📋 Pegar Coordenadas Directamente")
-    st.info("Pega el texto con las coordenadas de la foto (E:, N:, Cota:, Est:, etc.)")
+    st.subheader("📋 Pegar Coordenadas desde WhatsApp")
 
+    col_info1, col_info2 = st.columns(2)
+
+    with col_info1:
+        st.info("**Cómo copiar desde WhatsApp:**\n1. Captura de pantalla\n2. En WhatsApp, toca la foto\n3. Copia el texto visible")
+
+    with col_info2:
+        st.success("**Puedes pegar:**\n✓ Texto de coordenadas\n✓ Formato: E:, N:, Cota:, Est:\n✓ Líneas completas")
+
+    st.markdown("---")
+
+    st.write("**Pega el contenido aquí (Ctrl+V o Cmd+V):**")
     texto_coordenadas = st.text_area(
-        "Pega las coordenadas aquí",
-        height=150,
-        placeholder="Ejemplo:\nCódigo: VDC 4\nE 780720.633\nN 9603295.217\nElev: 825.387\nEst:K-0+154.895"
+        "Área para pegar",
+        height=180,
+        placeholder="Ejemplo:\nCódigo: VDC 4\nE 780720.633\nN 9603295.217\nElev: 825.387\nEst:K-0+154.895",
+        label_visibility="collapsed"
     )
 
-    procesar_texto_btn = st.button("✓ Procesar Coordenadas del Texto", type="primary")
+    # Botones
+    col_btn1, col_btn2, col_btn3 = st.columns([2, 2, 1])
+
+    with col_btn1:
+        procesar_texto_btn = st.button("✓ Procesar Texto", type="primary", use_container_width=True)
+
+    with col_btn2:
+        limpiar_texto_btn = st.button("🗑️ Limpiar", use_container_width=True)
+
+    if limpiar_texto_btn:
+        st.rerun()
 
     if procesar_texto_btn and texto_coordenadas:
         try:
@@ -243,28 +264,43 @@ with tab2:
             }])
 
             st.success("✅ Coordenadas extraídas:")
-            st.dataframe(resultado_df, use_container_width=True)
+            st.dataframe(resultado_df, use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.write("**Descargar resultados:**")
 
             # Opción de descargar
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
+
             with col1:
                 csv_data = resultado_df.to_csv(index=False)
                 st.download_button(
-                    "📥 Descargar CSV",
+                    "📥 CSV",
                     csv_data,
                     "coordenadas.csv",
                     "text/csv",
                     use_container_width=True
                 )
+
             with col2:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     resultado_df.to_excel(writer, sheet_name='Coordenadas', index=False)
                 st.download_button(
-                    "📥 Descargar Excel",
+                    "📥 Excel",
                     output.getvalue(),
                     "coordenadas.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+            with col3:
+                # Copiar a portapapeles (texto)
+                texto_resultado = f"Ensayo: {resultado_df['Ensayo'].values[0]}\nX: {resultado_df['X'].values[0]}\nY: {resultado_df['Y'].values[0]}\nCOTA: {resultado_df['COTA'].values[0]}\nABS: {resultado_df['ABS'].values[0]}"
+                st.button(
+                    "📋 Copiar",
+                    key="copiar_resultado",
+                    help=texto_resultado,
                     use_container_width=True
                 )
 
