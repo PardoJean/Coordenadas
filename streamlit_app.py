@@ -17,29 +17,30 @@ st.set_page_config(
 st.title("📍 Procesador Topográfico OCR")
 st.markdown("Extrae datos topográficos de imágenes usando OCR y genera Excel listo para usar.")
 
-# Cargar OCR con mejor manejo de errores
+# Cargar OCR con EasyOCR (más ligero que PaddleOCR)
 @st.cache_resource
-def cargar_paddle_ocr():
-    """Carga PaddleOCR de forma segura."""
+def cargar_easyocr():
+    """Carga EasyOCR de forma segura."""
     try:
-        from paddleocr import PaddleOCR
+        import easyocr
         import warnings
         warnings.filterwarnings('ignore')
 
-        ocr = PaddleOCR(use_angle_cls=True, lang='es')
-        return ocr, True, None
+        st.info("⏳ Inicializando modelo OCR (primera vez puede tomar 1-2 minutos)...")
+        reader = easyocr.Reader(['es', 'en'], gpu=False)
+        return reader, True, None
     except ImportError as e:
-        return None, False, f"PaddleOCR no instalado: {str(e)}"
+        return None, False, f"EasyOCR no instalado: {str(e)}"
     except Exception as e:
-        return None, False, f"Error cargando PaddleOCR: {str(e)}"
+        return None, False, f"Error cargando EasyOCR: {str(e)}"
 
-ocr, ocr_disponible, ocr_error = cargar_paddle_ocr()
+ocr, ocr_disponible, ocr_error = cargar_easyocr()
 
 # Mostrar estado del OCR
 if not ocr_disponible:
     with st.warning("⚠️ OCR no disponible"):
-        st.info(f"Error: {ocr_error}")
-        st.info("Intenta recargando la página en 1-2 minutos. El modelo de OCR puede estar descargándose.")
+        st.error(f"Error: {ocr_error}")
+        st.info("Intenta recargando la página en 1-2 minutos.")
 
 # Sidebar
 with st.sidebar:
@@ -133,12 +134,12 @@ if procesar_btn and imagenes_subidas:
                         pil_img = Image.open(imagen_archivo)
                         img_array = np.array(pil_img)
 
-                        # Procesar OCR
-                        resultado_ocr = ocr.ocr(img_array, cls=True)
+                        # Procesar OCR con EasyOCR
+                        resultados = ocr.readtext(img_array)
 
-                        # Extraer texto
-                        if resultado_ocr:
-                            texto_ocr = "\n".join([line[0][1] for line in resultado_ocr if line])
+                        # Extraer texto de resultados de EasyOCR
+                        if resultados:
+                            texto_ocr = "\n".join([resultado[1] for resultado in resultados])
                         else:
                             texto_ocr = ""
 
