@@ -17,19 +17,29 @@ st.set_page_config(
 st.title("📍 Procesador Topográfico OCR")
 st.markdown("Extrae datos topográficos de imágenes usando OCR y genera Excel listo para usar.")
 
-# Cargar OCR
+# Cargar OCR con mejor manejo de errores
 @st.cache_resource
 def cargar_paddle_ocr():
     """Carga PaddleOCR de forma segura."""
     try:
         from paddleocr import PaddleOCR
-        ocr = PaddleOCR(use_angle_cls=True, lang='es')
-        return ocr, True
-    except Exception as e:
-        st.error(f"❌ Error cargando PaddleOCR: {str(e)}")
-        return None, False
+        import warnings
+        warnings.filterwarnings('ignore')
 
-ocr, ocr_disponible = cargar_paddle_ocr()
+        ocr = PaddleOCR(use_angle_cls=True, lang='es')
+        return ocr, True, None
+    except ImportError as e:
+        return None, False, f"PaddleOCR no instalado: {str(e)}"
+    except Exception as e:
+        return None, False, f"Error cargando PaddleOCR: {str(e)}"
+
+ocr, ocr_disponible, ocr_error = cargar_paddle_ocr()
+
+# Mostrar estado del OCR
+if not ocr_disponible:
+    with st.warning("⚠️ OCR no disponible"):
+        st.info(f"Error: {ocr_error}")
+        st.info("Intenta recargando la página en 1-2 minutos. El modelo de OCR puede estar descargándose.")
 
 # Sidebar
 with st.sidebar:
@@ -110,7 +120,7 @@ if limpiar_btn:
 # Procesar imágenes
 if procesar_btn and imagenes_subidas:
     if not ocr_disponible:
-        st.error("❌ OCR no está disponible. Por favor, intenta más tarde.")
+        st.error(f"❌ OCR no está disponible. Razón: {ocr_error}\n\nIntenta recargando la página en 1-2 minutos.")
     else:
         with st.spinner("⏳ Procesando imágenes con OCR..."):
             try:
