@@ -158,9 +158,49 @@ def extraer_coordenadas(texto):
 
 st.write("**Copia imagen desde WhatsApp y pégala aquí:**")
 
-# Área de carga
+# Componente para pegar imagen
+st.markdown("""
+<div id="paste-container" style="border: 2px dashed #0066cc; padding: 30px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+    <p style="font-size: 16px; margin: 0; color: #0066cc;"><strong>📌 Pega imagen aquí (Ctrl+V)</strong></p>
+    <p style="color: gray; margin: 5px 0;">O usa el selector de abajo</p>
+    <div id="paste-preview" style="margin-top: 10px;"></div>
+</div>
+
+<script>
+document.addEventListener('paste', function(e) {
+    const items = e.clipboardData.items;
+    for (let item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                img.style.maxWidth = '200px';
+                img.style.maxHeight = '200px';
+                img.style.borderRadius = '5px';
+                document.getElementById('paste-preview').innerHTML = '';
+                document.getElementById('paste-preview').appendChild(img);
+
+                // Guardar en sessionStorage
+                sessionStorage.setItem('pasted_image', event.target.result);
+                sessionStorage.setItem('image_name', file.name);
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+});
+</script>
+""", unsafe_allow_html=True)
+
+# Verificar si hay imagen pegada
+if 'pasted_image' not in st.session_state:
+    st.session_state.pasted_image = None
+
+# Área de carga tradicional
 imagenes_subidas = st.file_uploader(
-    "Pega imagen aquí (Ctrl+V) o selecciona",
+    "O selecciona imagen",
     type=["jpg", "jpeg", "png", "webp"],
     accept_multiple_files=True,
     label_visibility="collapsed"
