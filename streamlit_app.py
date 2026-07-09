@@ -1,43 +1,10 @@
-"""Procesador Topográfico - Versión Web con Streamlit"""
+"""Procesador Topográfico - Versión Web con Streamlit (Standalone)"""
 import streamlit as st
 import pandas as pd
 import io
-from pathlib import Path
-import sys
 import numpy as np
 from PIL import Image
-
-sys.path.insert(0, str(Path(__file__).parent.resolve()))
-
-# Import lazy para evitar errores de cv2 en Streamlit Cloud
-def cargar_modulos():
-    """Carga módulos del proyecto (lazy loading)."""
-    try:
-        from src import parser_topografia
-        from src import validators
-        from src import sorter
-        from src.config import COLUMNAS
-        return parser_topografia, validators, sorter, COLUMNAS
-    except Exception as e:
-        st.error(f"Error cargando módulos: {str(e)}")
-        return None, None, None, None
-
-parser_topografia, validators, sorter, COLUMNAS = cargar_modulos()
-
-# Intenta usar PaddleOCR (para Streamlit Cloud)
-OCR_MODE = None
-ocr = None
-
-try:
-    from paddleocr import PaddleOCR
-    OCR_MODE = "paddle"
-    @st.cache_resource
-    def cargar_ocr():
-        return PaddleOCR(use_angle_cls=True, lang='es')
-    ocr = cargar_ocr()
-except Exception as e:
-    st.warning(f"⚠️ PaddleOCR no disponible: {str(e)}")
-    OCR_MODE = None
+import re
 
 # Configurar página
 st.set_page_config(
@@ -50,6 +17,20 @@ st.set_page_config(
 st.title("📍 Procesador Topográfico OCR")
 st.markdown("Extrae datos topográficos de imágenes usando OCR y genera Excel listo para usar.")
 
+# Cargar OCR
+@st.cache_resource
+def cargar_paddle_ocr():
+    """Carga PaddleOCR de forma segura."""
+    try:
+        from paddleocr import PaddleOCR
+        ocr = PaddleOCR(use_angle_cls=True, lang='es')
+        return ocr, True
+    except Exception as e:
+        st.error(f"❌ Error cargando PaddleOCR: {str(e)}")
+        return None, False
+
+ocr, ocr_disponible = cargar_paddle_ocr()
+
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Configuración")
@@ -58,8 +39,51 @@ with st.sidebar:
 # Inicializar sesión
 if "datos_procesados" not in st.session_state:
     st.session_state.datos_procesados = []
-if "imagenes_cargadas" not in st.session_state:
-    st.session_state.imagenes_cargadas = []
+
+# Funciones simples de parsing sin dependencias
+def extraer_tipo_ensayo(texto):
+    """Extrae el tipo de ensayo (POZO, VDC, DCP, TIS, DCA)."""
+    tipos = ["POZO", "VDC", "DCP", "TIS", "DCA"]
+    for tipo in tipos:
+        if tipo in texto.upper():
+            return tipo
+    return "SIN CLASIFICAR"
+
+def extraer_numero(texto):
+    """Extrae el número del ensayo."""
+    numeros = re.findall(r'\d+', texto)
+    if numeros:
+        try:
+            return int(numeros[0])
+        except:
+            return 0
+    return 0
+
+def extraer_coordenadas(texto):
+    """Extrae X, Y, COTA, ABS del texto OCR."""
+    resultado = {"X": "", "Y": "", "COTA": "", "ABS": ""}
+
+    # Buscar X (Este)
+    x_match = re.search(r'[EE](?:ste)?\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
+    if x_match:
+        resultado["X"] = x_match.group(1).strip()
+
+    # Buscar Y (Norte)
+    y_match = re.search(r'[NN](?:orte)?\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
+    if y_match:
+        resultado["Y"] = y_match.group(1).strip()
+
+    # Buscar COTA
+    cota_match = re.search(r'(?:Cota|Elev|Elevación)\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
+    if cota_match:
+        resultado["COTA"] = cota_match.group(1).strip()
+
+    # Buscar ABS
+    abs_match = re.search(r'(?:K0\+|ABS|Sta)\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
+    if abs_match:
+        resultado["ABS"] = abs_match.group(1).strip()
+
+    return resultado
 
 # Carga de imágenes
 st.subheader("1️⃣ Cargar Imágenes")
@@ -70,7 +94,7 @@ imagenes_subidas = st.file_uploader(
     help="Puedes seleccionar varias imágenes a la vez"
 )
 
-# Botón para procesar
+# Botones
 col1, col2 = st.columns(2)
 
 with col1:
@@ -81,57 +105,50 @@ with col2:
 
 if limpiar_btn:
     st.session_state.datos_procesados = []
-    st.session_state.imagenes_cargadas = []
     st.rerun()
 
 # Procesar imágenes
-def extraer_texto_ocr(img_pil):
-    """Extrae texto usando PaddleOCR."""
-    if OCR_MODE != "paddle" or ocr is None:
-        st.error("❌ OCR no está disponible. Asegúrate de que PaddleOCR esté instalado.")
-        return ""
-
-    try:
-        img_array = np.array(img_pil)
-        resultado = ocr.ocr(img_array, cls=True)
-        if resultado:
-            texto = "\n".join([line[0][1] for line in resultado if line])
-        else:
-            texto = ""
-        return texto
-    except Exception as e:
-        st.error(f"Error en OCR: {str(e)}")
-        return ""
-
 if procesar_btn and imagenes_subidas:
-    if not COLUMNAS or not parser_topografia:
-        st.error("❌ Error: Los módulos del proyecto no se pudieron cargar.")
-        st.info("Intenta recargar la página.")
+    if not ocr_disponible:
+        st.error("❌ OCR no está disponible. Por favor, intenta más tarde.")
     else:
         with st.spinner("⏳ Procesando imágenes con OCR..."):
             try:
                 datos_procesados = []
                 errores = []
 
-                # Procesar cada imagen
                 for idx, imagen_archivo in enumerate(imagenes_subidas, 1):
                     try:
                         # Leer imagen
                         pil_img = Image.open(imagen_archivo)
+                        img_array = np.array(pil_img)
 
                         # Procesar OCR
-                        texto_ocr = extraer_texto_ocr(pil_img)
+                        resultado_ocr = ocr.ocr(img_array, cls=True)
+
+                        # Extraer texto
+                        if resultado_ocr:
+                            texto_ocr = "\n".join([line[0][1] for line in resultado_ocr if line])
+                        else:
+                            texto_ocr = ""
 
                         if not texto_ocr:
                             errores.append(f"No se extrajo texto de {imagen_archivo.name}")
                             continue
 
                         # Parsear datos
-                        registro = parser_topografia.parsear_topografia(texto_ocr)
+                        tipo = extraer_tipo_ensayo(texto_ocr)
+                        numero = extraer_numero(texto_ocr)
+                        coords = extraer_coordenadas(texto_ocr)
 
-                        # Validar
-                        registro = validators.validar_registro(registro)
-                        registro["imagen"] = imagen_archivo.name
+                        registro = {
+                            "Ensayo": f"{tipo} {numero}".strip() if numero > 0 else tipo,
+                            "X": coords["X"],
+                            "Y": coords["Y"],
+                            "COTA": coords["COTA"],
+                            "ABS": coords["ABS"],
+                            "Imagen": imagen_archivo.name
+                        }
 
                         datos_procesados.append(registro)
 
@@ -140,12 +157,13 @@ if procesar_btn and imagenes_subidas:
 
                 # Ordenar registros
                 if datos_procesados:
-                    datos_procesados = sorter.ordenar_registros(datos_procesados)
-                    st.session_state.datos_procesados = datos_procesados
+                    # Convertir a DataFrame para ordenar
+                    df_temp = pd.DataFrame(datos_procesados)
+                    df_temp = df_temp.sort_values("Ensayo")
+                    datos_procesados = df_temp.to_dict('records')
 
+                    st.session_state.datos_procesados = datos_procesados
                     st.success(f"✅ Se procesaron {len(datos_procesados)} imágenes correctamente")
-                    if OCR_MODE:
-                        st.info(f"Usando OCR: {OCR_MODE.upper()}")
 
                     if errores:
                         with st.warning(f"⚠️ {len(errores)} advertencia(s)"):
@@ -157,59 +175,50 @@ if procesar_btn and imagenes_subidas:
                         st.error(error)
 
             except Exception as e:
-                st.error(f"❌ Error general: {str(e)}")
+                st.error(f"❌ Error: {str(e)}")
 
 # Mostrar y editar datos
 if st.session_state.datos_procesados:
     st.subheader("2️⃣ Vista Previa y Edición")
 
-    # Convertir a DataFrame
-    df = pd.DataFrame(st.session_state.datos_procesados)
-
-    # Remover columna "imagen" de la vista editable
-    columnas_editar = [col for col in COLUMNAS if col in df.columns]
-
-    # Editor editable
-    st.info("💡 Puedes editar cualquier celda directamente en la tabla")
-
+    # DataFrame editable
     df_editada = st.data_editor(
-        df[columnas_editar],
+        pd.DataFrame(st.session_state.datos_procesados),
         use_container_width=True,
         hide_index=False,
         num_rows="dynamic"
     )
 
-    # Actualizar datos procesados
+    # Actualizar datos
     st.session_state.datos_procesados = df_editada.to_dict('records')
 
-    # Mostrar estadísticas
+    # Estadísticas
     st.subheader("📊 Estadísticas")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric("Total de Registros", len(df_editada))
     with col2:
-        ensayos = df_editada["Ensayo"].nunique() if "Ensayo" in df_editada.columns else 0
-        st.metric("Tipos de Ensayo", ensayos)
+        tipos = df_editada["Ensayo"].nunique() if "Ensayo" in df_editada.columns else 0
+        st.metric("Tipos de Ensayo", tipos)
     with col3:
         vacios = df_editada.isna().sum().sum()
         st.metric("Campos Vacíos", vacios)
     with col4:
-        st.metric("Imágenes Procesadas", len(imagenes_subidas) if imagenes_subidas else 0)
+        st.metric("Archivos Procesados", len(st.session_state.datos_procesados))
 
-    # Descargar resultados
+    # Descargar
     st.subheader("3️⃣ Descargar Resultados")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        # Descargar como Excel
+        # Excel
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_editada.to_excel(writer, sheet_name='Coordenadas', index=False)
 
         excel_data = output.getvalue()
-
         st.download_button(
             label="📥 Descargar Excel",
             data=excel_data,
@@ -219,9 +228,8 @@ if st.session_state.datos_procesados:
         )
 
     with col2:
-        # Descargar como CSV
+        # CSV
         csv_data = df_editada.to_csv(index=False)
-
         st.download_button(
             label="📥 Descargar CSV",
             data=csv_data,
@@ -233,11 +241,9 @@ if st.session_state.datos_procesados:
 # Footer
 st.divider()
 st.markdown("""
-**Procesador Topográfico v3.0** | [GitHub](https://github.com/PardoJean/Coordendas)
+**Procesador Topográfico v3.0** | [GitHub](https://github.com/PardoJean/Coordenadas)
 
-Características:
-- ✅ OCR automático con Tesseract
-- ✅ Parsing inteligente de coordenadas
+- ✅ OCR automático con PaddleOCR
 - ✅ Edición manual de datos
 - ✅ Exportación a Excel y CSV
 - ✅ Funciona 100% en el navegador
