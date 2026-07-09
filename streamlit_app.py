@@ -105,6 +105,28 @@ def truncar_decimales(valor_str, decimales=2):
     except:
         return valor_str
 
+def procesar_abs(abs_str):
+    """Procesa ABS: primer signo + número sin 0 + 2 decimales.
+    Ej: -0+218.161 -> -218.16"""
+    if not abs_str:
+        return ""
+
+    # Extraer primer signo (- o +)
+    primer_signo = ""
+    if abs_str[0] in ['-', '+']:
+        primer_signo = abs_str[0]
+        abs_str = abs_str[1:]
+
+    # Buscar el número después del primer 0
+    match = re.search(r'0\s*[+-]\s*(\d+[\.,]?\d*)', abs_str)
+    if match:
+        numero = match.group(1).replace(',', '.')
+        # Truncar a 2 decimales
+        numero_limpio = truncar_decimales(numero, decimales=2)
+        return f"{primer_signo}{numero_limpio}"
+
+    return abs_str
+
 def extraer_coordenadas(texto):
     """Extrae X, Y, COTA, ABS del texto OCR con precisión."""
     resultado = {"X": "", "Y": "", "COTA": "", "ABS": ""}
@@ -167,37 +189,103 @@ def extraer_coordenadas(texto):
             resultado["ABS"] = abs_valor
             break
 
-    # Aplicar truncado a 2 decimales sin redondear
-    for key in resultado:
+    # Procesar ABS especialmente (primer signo + número sin 0)
+    if resultado["ABS"]:
+        resultado["ABS"] = procesar_abs(resultado["ABS"])
+
+    # Aplicar truncado a 2 decimales sin redondear (para X, Y, COTA)
+    for key in ["X", "Y", "COTA"]:
         if resultado[key]:
             resultado[key] = truncar_decimales(resultado[key], decimales=2)
 
     return resultado
 
-# Carga de imágenes
-st.subheader("1️⃣ Cargar Imágenes")
-imagenes_subidas = st.file_uploader(
-    "Selecciona imágenes de topografía",
-    type=["jpg", "jpeg", "png", "webp"],
-    accept_multiple_files=True,
-    help="Puedes seleccionar varias imágenes a la vez"
-)
+# Tabs para dos formas de entrada
+tab1, tab2 = st.tabs(["📸 Procesar Imágenes", "📋 Pegar Coordenadas"])
 
-# Botones
-col1, col2 = st.columns(2)
+# TAB 1: Carga de imágenes
+with tab1:
+    st.subheader("1️⃣ Cargar o Arrastrar Imágenes")
+    st.info("💡 Puedes arrastrar imágenes directamente aquí o seleccionar del explorador")
 
-with col1:
-    procesar_btn = st.button("▶ Procesar Imágenes", type="primary", use_container_width=True)
+    imagenes_subidas = st.file_uploader(
+        "Selecciona imágenes de topografía",
+        type=["jpg", "jpeg", "png", "webp"],
+        accept_multiple_files=True,
+        help="Arrastra imágenes aquí o haz clic para seleccionar"
+    )
 
-with col2:
-    limpiar_btn = st.button("🗑️ Limpiar Todo", use_container_width=True)
+# TAB 2: Pegar coordenadas
+with tab2:
+    st.subheader("📋 Pegar Coordenadas Directamente")
+    st.info("Pega el texto con las coordenadas de la foto (E:, N:, Cota:, Est:, etc.)")
 
-if limpiar_btn:
-    st.session_state.datos_procesados = []
-    st.rerun()
+    texto_coordenadas = st.text_area(
+        "Pega las coordenadas aquí",
+        height=150,
+        placeholder="Ejemplo:\nCódigo: VDC 4\nE 780720.633\nN 9603295.217\nElev: 825.387\nEst:K-0+154.895"
+    )
 
-# Procesar imágenes
-if procesar_btn and imagenes_subidas:
+    procesar_texto_btn = st.button("✓ Procesar Coordenadas del Texto", type="primary")
+
+    if procesar_texto_btn and texto_coordenadas:
+        try:
+            ensayo = extraer_ensayo_completo(texto_coordenadas)
+            coords = extraer_coordenadas(texto_coordenadas)
+
+            # Mostrar resultado en tabla
+            resultado_df = pd.DataFrame([{
+                "Ensayo": ensayo,
+                "X": coords["X"],
+                "Y": coords["Y"],
+                "COTA": coords["COTA"],
+                "ABS": coords["ABS"]
+            }])
+
+            st.success("✅ Coordenadas extraídas:")
+            st.dataframe(resultado_df, use_container_width=True)
+
+            # Opción de descargar
+            col1, col2 = st.columns(2)
+            with col1:
+                csv_data = resultado_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Descargar CSV",
+                    csv_data,
+                    "coordenadas.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+            with col2:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    resultado_df.to_excel(writer, sheet_name='Coordenadas', index=False)
+                st.download_button(
+                    "📥 Descargar Excel",
+                    output.getvalue(),
+                    "coordenadas.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+
+    # Botones dentro del tab1
+    col1, col2 = st.columns(2)
+
+    with col1:
+        procesar_btn = st.button("▶ Procesar Imágenes", type="primary", use_container_width=True)
+
+    with col2:
+        limpiar_btn = st.button("🗑️ Limpiar Todo", use_container_width=True)
+
+    if limpiar_btn:
+        st.session_state.datos_procesados = []
+        st.rerun()
+
+    # Procesar imágenes
+    if procesar_btn and imagenes_subidas:
     if not ocr_disponible:
         st.error(f"❌ OCR no está disponible. Razón: {ocr_error}\n\nIntenta recargando la página en 1-2 minutos.")
     else:
