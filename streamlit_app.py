@@ -152,16 +152,19 @@ def extraer_coordenadas(texto):
             resultado["COTA"] = limpiar_numero(cota_match.group(1))
             break
 
-    # Buscar ABS (Estación) - Est:K-0+valor o K0+valor
+    # Buscar ABS (Estación) - Est:K-0+valor o K0+valor (capturar primer signo + valor)
     abs_patterns = [
-        r'EST\s*[:\.]?\s*K\s*-?\s*0\s*\+\s*(-?\d+[\.,]?\d*)',  # Est:K-0+218.161
-        r'K\s*-?\s*0\s*\+\s*(-?\d+[\.,]?\d*)',  # K-0+valor o K0+valor
+        r'EST\s*[:\.]?\s*K\s*([-+]?\s*0\s*[+-]\s*\d+[\.,]?\d*)',  # Est:K-0+218.161 captura -0+218.161
+        r'K\s*([-+]?\s*0\s*[+-]\s*\d+[\.,]?\d*)',  # K-0+valor captura -0+valor
         r'(?:ABS|STATION|STA)\s*[:\.]?\s*(-?\d+[\.,]?\d*)',
     ]
     for pattern in abs_patterns:
         abs_match = re.search(pattern, texto_upper)
         if abs_match:
-            resultado["ABS"] = limpiar_numero(abs_match.group(1))
+            abs_valor = abs_match.group(1)
+            # Limpiar espacios pero mantener signos
+            abs_valor = re.sub(r'\s+', '', abs_valor)
+            resultado["ABS"] = abs_valor
             break
 
     # Aplicar truncado a 2 decimales sin redondear
