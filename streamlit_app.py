@@ -70,29 +70,66 @@ def extraer_numero(texto):
             return 0
     return 0
 
+def limpiar_numero(texto):
+    """Limpia espacios y caracteres especiales de números."""
+    if not texto:
+        return ""
+    return re.sub(r'[\s,]', '', texto)
+
 def extraer_coordenadas(texto):
-    """Extrae X, Y, COTA, ABS del texto OCR."""
+    """Extrae X, Y, COTA, ABS del texto OCR con mejor precisión."""
     resultado = {"X": "", "Y": "", "COTA": "", "ABS": ""}
 
-    # Buscar X (Este)
-    x_match = re.search(r'[EE](?:ste)?\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
-    if x_match:
-        resultado["X"] = x_match.group(1).strip()
+    # Convertir a mayúsculas para búsqueda
+    texto_upper = texto.upper()
+    lineas = texto.split('\n')
 
-    # Buscar Y (Norte)
-    y_match = re.search(r'[NN](?:orte)?\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
-    if y_match:
-        resultado["Y"] = y_match.group(1).strip()
+    # Buscar X (Este) - números de 6-7 dígitos
+    x_patterns = [
+        r'E(?:STE)?\s*[:\.]?\s*(-?\d+[\.,]?\d*)',  # E: 780720.633
+        r'ESTE\s*[:\.]?\s*(-?\d+[\.,]?\d*)',
+        r'(\d{6,7}[\.,]\d+)',  # Números grandes tipo coordenadas UTM
+    ]
+    for pattern in x_patterns:
+        x_match = re.search(pattern, texto_upper)
+        if x_match:
+            resultado["X"] = limpiar_numero(x_match.group(1))
+            break
 
-    # Buscar COTA
-    cota_match = re.search(r'(?:Cota|Elev|Elevación)\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
-    if cota_match:
-        resultado["COTA"] = cota_match.group(1).strip()
+    # Buscar Y (Norte) - números que comienzan con 9 (9603591.641)
+    y_patterns = [
+        r'N(?:ORTE)?\s*[:\.]?\s*(-?\d+[\.,]?\d*)',  # N: 9603591.641
+        r'NORTE\s*[:\.]?\s*(-?\d+[\.,]?\d*)',
+        r'(9\d{6,7}[\.,]\d+)',  # Números que comienzan con 9 (típico de coordenadas UTM Norte)
+    ]
+    for pattern in y_patterns:
+        y_match = re.search(pattern, texto_upper)
+        if y_match:
+            resultado["Y"] = limpiar_numero(y_match.group(1))
+            break
 
-    # Buscar ABS
-    abs_match = re.search(r'(?:K0\+|ABS|Sta)\s*[:\.]?\s*([0-9,.\s]+)', texto, re.IGNORECASE)
-    if abs_match:
-        resultado["ABS"] = abs_match.group(1).strip()
+    # Buscar COTA/ELEVACIÓN - número con signo negativo o positivo
+    cota_patterns = [
+        r'(?:COTA|ELEV|ELEVACIÓN|ELEVATION|ELE[Vv]\.?|ELEY)\s*[:\.]?\s*(-?\d+[\.,]?\d*)',
+        r'CRUZ\s*[:\.]?\s*(-?\d+[\.,]?\d*)',  # También busca en "Cruz"
+    ]
+    for pattern in cota_patterns:
+        cota_match = re.search(pattern, texto_upper)
+        if cota_match:
+            resultado["COTA"] = limpiar_numero(cota_match.group(1))
+            break
+
+    # Buscar ABS (Estación) - K0+valor o similar
+    abs_patterns = [
+        r'K0\+(-?\d+[\.,]?\d*)',
+        r'(?:ABS|STATION|STA|EST)\s*[:\.]?\s*(-?\d+[\.,]?\d*)',
+        r'(?:EST)\s*[:\.]?\s*(-?\d+[\.,]?\d*)',
+    ]
+    for pattern in abs_patterns:
+        abs_match = re.search(pattern, texto_upper)
+        if abs_match:
+            resultado["ABS"] = limpiar_numero(abs_match.group(1))
+            break
 
     return resultado
 
