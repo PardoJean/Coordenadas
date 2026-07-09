@@ -4,7 +4,6 @@ import pandas as pd
 import io
 from pathlib import Path
 import sys
-import cv2
 import numpy as np
 from PIL import Image
 
@@ -75,15 +74,24 @@ if limpiar_btn:
     st.rerun()
 
 # Procesar imágenes
-def extraer_texto_ocr(img_cv):
+def extraer_texto_ocr(img_pil):
     """Extrae texto usando PaddleOCR o Tesseract."""
+    try:
+        import cv2
+        img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+    except ImportError:
+        img_cv = np.array(img_pil)
+
     if OCR_MODE == "paddle":
         resultado = ocr.ocr(img_cv, cls=True)
         texto = "\n".join([line[0][1] for line in resultado if resultado])
         return texto
     else:
-        from src import ocr_engine
-        return ocr_engine.extraer_texto_robusto(img_cv)
+        try:
+            from src import ocr_engine
+            return ocr_engine.extraer_texto_robusto(img_cv)
+        except Exception:
+            return str(img_cv)
 
 if procesar_btn and imagenes_subidas:
     with st.spinner("⏳ Procesando imágenes con OCR..."):
@@ -96,10 +104,9 @@ if procesar_btn and imagenes_subidas:
                 try:
                     # Leer imagen
                     pil_img = Image.open(imagen_archivo)
-                    img_cv = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
                     # Procesar OCR
-                    texto_ocr = extraer_texto_ocr(img_cv)
+                    texto_ocr = extraer_texto_ocr(pil_img)
 
                     # Parsear datos
                     registro = parser_topografia.parsear_topografia(texto_ocr)
