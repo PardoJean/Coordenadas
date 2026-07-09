@@ -4,15 +4,30 @@ import pandas as pd
 import io
 from pathlib import Path
 import sys
+import cv2
+import numpy as np
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
-from src import ocr_engine
 from src import parser_topografia
-from src import excel_writer
 from src import validators
 from src import sorter
 from src.config import COLUMNAS
+
+# Intenta usar PaddleOCR (para Streamlit Cloud)
+try:
+    from paddleocr import PaddleOCR
+    OCR_MODE = "paddle"
+    @st.cache_resource
+    def cargar_ocr():
+        return PaddleOCR(use_angle_cls=True, lang='es')
+    ocr = cargar_ocr()
+except ImportError:
+    # Fallback a Tesseract si PaddleOCR no está disponible
+    OCR_MODE = "tesseract"
+    from src import ocr_engine
+    ocr_engine.configurar_tesseract()
 
 # Configurar página
 st.set_page_config(
@@ -60,12 +75,19 @@ if limpiar_btn:
     st.rerun()
 
 # Procesar imágenes
+def extraer_texto_ocr(img_cv):
+    """Extrae texto usando PaddleOCR o Tesseract."""
+    if OCR_MODE == "paddle":
+        resultado = ocr.ocr(img_cv, cls=True)
+        texto = "\n".join([line[0][1] for line in resultado if resultado])
+        return texto
+    else:
+        from src import ocr_engine
+        return ocr_engine.extraer_texto_robusto(img_cv)
+
 if procesar_btn and imagenes_subidas:
     with st.spinner("⏳ Procesando imágenes con OCR..."):
         try:
-            # Configurar OCR
-            ocr_engine.configurar_tesseract()
-
             datos_procesados = []
             errores = []
 
@@ -73,15 +95,11 @@ if procesar_btn and imagenes_subidas:
             for idx, imagen_archivo in enumerate(imagenes_subidas, 1):
                 try:
                     # Leer imagen
-                    from PIL import Image
-                    import cv2
-                    import numpy as np
-
                     pil_img = Image.open(imagen_archivo)
                     img_cv = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
                     # Procesar OCR
-                    texto_ocr = ocr_engine.extraer_texto_robusto(img_cv)
+                    texto_ocr = extraer_texto_ocr(img_cv)
 
                     # Parsear datos
                     registro = parser_topografia.parsear_topografia(texto_ocr)
@@ -101,6 +119,7 @@ if procesar_btn and imagenes_subidas:
                 st.session_state.datos_procesados = datos_procesados
 
                 st.success(f"✅ Se procesaron {len(datos_procesados)} imágenes correctamente")
+                st.info(f"Usando OCR: {OCR_MODE.upper()}")
 
                 if errores:
                     with st.warning(f"⚠️ {len(errores)} error(es) detectado(s)"):
@@ -112,8 +131,7 @@ if procesar_btn and imagenes_subidas:
                     st.error(error)
 
         except Exception as e:
-            st.error(f"❌ Error al configurar OCR: {str(e)}")
-            st.info("Asegúrate de que Tesseract OCR esté instalado en tu sistema")
+            st.error(f"❌ Error: {str(e)}")
 
 # Mostrar y editar datos
 if st.session_state.datos_procesados:
