@@ -52,23 +52,37 @@ if "datos_procesados" not in st.session_state:
     st.session_state.datos_procesados = []
 
 # Funciones simples de parsing sin dependencias
-def extraer_tipo_ensayo(texto):
-    """Extrae el tipo de ensayo (POZO, VDC, DCP, TIS, DCA)."""
+def extraer_ensayo_completo(texto):
+    """Extrae tipo y número del ensayo donde dice 'Código'."""
+    texto_upper = texto.upper()
+
+    # Buscar donde dice "Código" y captura lo que viene después
+    codigo_match = re.search(r'C[ÓO]DIGO\s*[>\:]?\s*([A-Z]+)\s*(\d+)?', texto_upper)
+    if codigo_match:
+        tipo = codigo_match.group(1).strip()
+        numero = codigo_match.group(2) if codigo_match.group(2) else ""
+
+        # Validar que el tipo sea uno de los conocidos
+        tipos_validos = ["POZO", "VDC", "DCP", "TIS", "DCA"]
+        for tipo_valido in tipos_validos:
+            if tipo_valido in tipo:
+                if numero:
+                    return f"{tipo_valido} {numero}"
+                else:
+                    return tipo_valido
+
+    # Fallback: buscar tipos en el texto si no encuentra "Código"
     tipos = ["POZO", "VDC", "DCP", "TIS", "DCA"]
     for tipo in tipos:
-        if tipo in texto.upper():
-            return tipo
-    return "SIN CLASIFICAR"
+        if tipo in texto_upper:
+            # Buscar número cerca del tipo
+            tipo_match = re.search(f'{tipo}\\s*(\\d+)?', texto_upper)
+            if tipo_match and tipo_match.group(1):
+                return f"{tipo} {tipo_match.group(1)}"
+            else:
+                return tipo
 
-def extraer_numero(texto):
-    """Extrae el número del ensayo."""
-    numeros = re.findall(r'\d+', texto)
-    if numeros:
-        try:
-            return int(numeros[0])
-        except:
-            return 0
-    return 0
+    return "SIN CLASIFICAR"
 
 def limpiar_numero(texto):
     """Limpia espacios y caracteres especiales de números."""
@@ -209,12 +223,11 @@ if procesar_btn and imagenes_subidas:
                             continue
 
                         # Parsear datos
-                        tipo = extraer_tipo_ensayo(texto_ocr)
-                        numero = extraer_numero(texto_ocr)
+                        ensayo = extraer_ensayo_completo(texto_ocr)
                         coords = extraer_coordenadas(texto_ocr)
 
                         registro = {
-                            "Ensayo": f"{tipo} {numero}".strip() if numero > 0 else tipo,
+                            "Ensayo": ensayo,
                             "X": coords["X"],
                             "Y": coords["Y"],
                             "COTA": coords["COTA"],
