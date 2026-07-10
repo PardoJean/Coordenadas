@@ -238,6 +238,7 @@
     TIPOS,
     TIPOS_ORDEN,
     SIMBOLOGIA,
+    _SIMBOLOGIA_SIN: SIMBOLOGIA_SIN,
     truncar2,
     numLimpio,
     procesarAbs,
