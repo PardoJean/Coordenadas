@@ -97,6 +97,7 @@ th, td { padding: .5rem .7rem; text-align: center; border-bottom: 1px solid var(
 th { background: var(--fondo-tarjeta); font-weight: 700; }
 td[contenteditable="true"] { cursor: text; }
 td[contenteditable="true"]:focus { outline: 2px solid var(--azul); background: #eff6ff; }
+td.celda-sel { background: rgba(102, 126, 234, 0.18); outline: 1px solid var(--azul); outline-offset: -1px; }
 .btn-borrar-fila { background: none; border: none; color: var(--rojo); cursor: pointer; font-size: 1rem; }
 
 .metricas { display: flex; gap: .8rem; margin: 1rem 0; flex-wrap: wrap; }

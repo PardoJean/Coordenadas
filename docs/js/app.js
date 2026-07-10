@@ -125,23 +125,26 @@
   }
 
   function renderizarTabla() {
+    limpiarSeleccion();
     const ordenados = window.TopoParser.ordenarRegistros(registros);
     el.tablaBody.innerHTML = "";
-    for (const reg of ordenados) {
+    ordenados.forEach((reg, filaIdx) => {
       const tr = document.createElement("tr");
-      for (const col of COLUMNAS) {
+      COLUMNAS.forEach((col, colIdx) => {
         const td = document.createElement("td");
         td.contentEditable = "true";
         td.textContent = reg[col];
         td.dataset.id = reg._id;
         td.dataset.col = col;
+        td.dataset.fila = filaIdx;
+        td.dataset.colIdx = colIdx;
         td.addEventListener("input", () => {
           const r = registros.find((x) => x._id === reg._id);
           if (r) r[col] = td.textContent.trim();
           renderizarMetricasYMapa();
         });
         tr.appendChild(td);
-      }
+      });
       const tdBorrar = document.createElement("td");
       const btn = document.createElement("button");
       btn.className = "btn-borrar-fila";
@@ -154,12 +157,105 @@
       tdBorrar.appendChild(btn);
       tr.appendChild(tdBorrar);
       el.tablaBody.appendChild(tr);
-    }
+    });
   }
 
   el.btnAgregarFila.addEventListener("click", () => {
     agregarRegistro({ Ensayo: "", X: "", Y: "", COTA: "", ABS: "" });
     renderizarTodo();
+  });
+
+  // ---- Selección de rango de celdas (arrastrar con el mouse, como Excel) --
+  // Cada celda es un <td contenteditable> independiente, así que la
+  // selección nativa del navegador no puede extenderse de una a otra (queda
+  // atrapada dentro de la celda donde empezó el arrastre). Por eso se lleva
+  // un rango propio (fila/columna de inicio y fin) y se intercepta el evento
+  // "copy" para armar el TSV solo de las celdas seleccionadas: así se puede
+  // arrastrar de, por ejemplo, X a COTA en una o dos filas y pegarlo en
+  // Excel/Sheets u otra plataforma con Ctrl+C / Ctrl+V, igual que en una
+  // hoja de cálculo real.
+  let selInicio = null;
+  let selFin = null;
+  let arrastrando = false;
+  let huboArrastre = false;
+
+  function celdaDesde(evento) {
+    const td = evento.target.closest && evento.target.closest("td[data-fila]");
+    if (!td) return null;
+    return { fila: parseInt(td.dataset.fila, 10), col: parseInt(td.dataset.colIdx, 10) };
+  }
+
+  function limpiarSeleccion() {
+    selInicio = null;
+    selFin = null;
+    el.tablaBody.querySelectorAll(".celda-sel").forEach((td) => td.classList.remove("celda-sel"));
+  }
+
+  function actualizarResaltadoSeleccion() {
+    if (!selInicio || !selFin) return;
+    const filaMin = Math.min(selInicio.fila, selFin.fila);
+    const filaMax = Math.max(selInicio.fila, selFin.fila);
+    const colMin = Math.min(selInicio.col, selFin.col);
+    const colMax = Math.max(selInicio.col, selFin.col);
+    el.tablaBody.querySelectorAll("td[data-fila]").forEach((td) => {
+      const f = parseInt(td.dataset.fila, 10);
+      const c = parseInt(td.dataset.colIdx, 10);
+      const dentro = f >= filaMin && f <= filaMax && c >= colMin && c <= colMax;
+      td.classList.toggle("celda-sel", dentro);
+    });
+  }
+
+  el.tablaBody.addEventListener("mousedown", (evento) => {
+    const celda = celdaDesde(evento);
+    if (!celda) return;
+    selInicio = celda;
+    selFin = celda;
+    arrastrando = true;
+    huboArrastre = false;
+    actualizarResaltadoSeleccion();
+  });
+
+  document.addEventListener("mousemove", (evento) => {
+    if (!arrastrando) return;
+    const celda = celdaDesde(evento);
+    if (!celda) return;
+    if (celda.fila !== selFin.fila || celda.col !== selFin.col) {
+      huboArrastre = true;
+      selFin = celda;
+      actualizarResaltadoSeleccion();
+      window.getSelection().removeAllRanges();
+      evento.preventDefault();
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    if (!huboArrastre) limpiarSeleccion();
+  });
+
+  document.addEventListener("mousedown", (evento) => {
+    if (!el.tablaBody.contains(evento.target)) limpiarSeleccion();
+  });
+
+  document.addEventListener("copy", (evento) => {
+    if (!selInicio || !selFin) return;
+    if (selInicio.fila === selFin.fila && selInicio.col === selFin.col) return; // 1 sola celda: copia nativa normal
+    const filaMin = Math.min(selInicio.fila, selFin.fila);
+    const filaMax = Math.max(selInicio.fila, selFin.fila);
+    const colMin = Math.min(selInicio.col, selFin.col);
+    const colMax = Math.max(selInicio.col, selFin.col);
+    const ordenados = window.TopoParser.ordenarRegistros(registros);
+    const filas = [];
+    for (let f = filaMin; f <= filaMax; f++) {
+      const reg = ordenados[f];
+      if (!reg) continue;
+      const valores = [];
+      for (let c = colMin; c <= colMax; c++) valores.push(reg[COLUMNAS[c]] || "");
+      filas.push(valores.join("\t"));
+    }
+    evento.clipboardData.setData("text/plain", filas.join("\r\n"));
+    evento.preventDefault();
   });
 
   el.btnLimpiar.addEventListener("click", () => {
