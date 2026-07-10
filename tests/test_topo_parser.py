@@ -174,6 +174,32 @@ def main():
     else:
         print("\n(Se omite el test de OCR extremo a extremo: Tesseract no está instalado)")
 
+    # ---- Conversión UTM -> lat/lon con datum (para el mapa) ----
+    try:
+        import pyproj  # noqa: F401
+        from topo_parser import utm_a_latlon
+
+        print("\n== Conversión UTM -> lat/lon (punto real, zona 17 Sur) ==")
+        este, norte = "780816.71", "9603295.21"
+        # PSAD56 (datum de las capturas) debe caer ~446 m distinto de WGS84.
+        lat_p, lon_p = utm_a_latlon(este, norte, datum="PSAD56")
+        lat_w, lon_w = utm_a_latlon(este, norte, datum="WGS84")
+        casos_geo = [
+            ("PSAD56 lat ~ -3.5889", abs(lat_p - (-3.5889)) < 1e-3, True),
+            ("PSAD56 lon ~ -78.4745", abs(lon_p - (-78.4745)) < 1e-3, True),
+            ("WGS84  lat ~ -3.5856", abs(lat_w - (-3.5856)) < 1e-3, True),
+            ("PSAD56 != WGS84 (hay cambio de datum)", abs(lat_p - lat_w) > 1e-4, True),
+            ("vacío -> None", utm_a_latlon("", norte) == (None, None), True),
+            ("texto -> None", utm_a_latlon("abc", "xyz") == (None, None), True),
+        ]
+        for nombre, got, esp in casos_geo:
+            estado = "OK " if got == esp else "FALLA"
+            if got != esp:
+                todo_ok = False
+            print(f"  [{estado}] {nombre}")
+    except ImportError:
+        print("\n(Se omite el test de conversión geográfica: pyproj no está instalado)")
+
     print("\n" + ("TODOS LOS TESTS PASARON" if todo_ok else "HAY FALLAS"))
     return 0 if todo_ok else 1
 

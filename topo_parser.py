@@ -190,12 +190,45 @@ def parsear(tokens):
 
 # Zona UTM por defecto (proyecto en Zamora Chinchipe, Ecuador -> zona 17 Sur).
 ZONA_UTM_DEFECTO = 17
+# Datum por defecto de las capturas de topografía en Ecuador.
+DATUM_DEFECTO = "PSAD56"
+DATUMS = ("PSAD56", "WGS84")
 
 
-def utm_a_latlon(este, norte, zona=ZONA_UTM_DEFECTO, hemisferio_norte=False):
+def _epsg_utm(zona, hemisferio_norte, datum):
+    """Código EPSG del sistema UTM de origen según zona, hemisferio y datum.
+
+    Los equipos de topografía en Ecuador suelen entregar coordenadas en
+    PSAD56 (datum sudamericano provisional 1956), que difiere de WGS84 —el
+    datum de los mapas web— en varios cientos de metros. Usar el EPSG correcto
+    permite que pyproj aplique la transformación de datum al pasar a lat/lon."""
+    zona = int(zona)
+    if str(datum).upper().startswith("WGS"):
+        return 32600 + zona if hemisferio_norte else 32700 + zona
+    # PSAD56 (zonas de Ecuador/Perú): norte 24800+zona, sur 24860+zona.
+    return 24800 + zona if hemisferio_norte else 24860 + zona
+
+
+def _transformador(epsg_origen):
+    """Devuelve (y cachea) el Transformer de EPSG origen a WGS84 lat/lon."""
+    import functools
+    from pyproj import Transformer
+
+    @functools.lru_cache(maxsize=None)
+    def _cache(codigo):
+        return Transformer.from_crs(f"EPSG:{codigo}", "EPSG:4326", always_xy=True)
+
+    _transformador._cache = getattr(_transformador, "_cache", _cache)
+    return _transformador._cache(epsg_origen)
+
+
+def utm_a_latlon(este, norte, zona=ZONA_UTM_DEFECTO, hemisferio_norte=False,
+                 datum=DATUM_DEFECTO):
     """Convierte una coordenada UTM (Este=X, Norte=Y) a (latitud, longitud) en
-    grados decimales, para poder ubicar el punto en un mapa. Devuelve
-    (None, None) si los valores no son numéricos o caen fuera de rango."""
+    grados decimales WGS84, para ubicar el punto en un mapa. Aplica la
+    transformación de datum correspondiente (PSAD56 por defecto, como entregan
+    los equipos en Ecuador). Devuelve (None, None) si los valores no son
+    numéricos o la transformación falla."""
     try:
         e = float(str(este).replace(" ", "").replace(",", "."))
         n = float(str(norte).replace(" ", "").replace(",", "."))
@@ -204,10 +237,12 @@ def utm_a_latlon(este, norte, zona=ZONA_UTM_DEFECTO, hemisferio_norte=False):
     if e == 0 or n == 0:
         return None, None
     try:
-        import utm
-        lat, lon = utm.to_latlon(e, n, zona, northern=hemisferio_norte)
+        epsg = _epsg_utm(zona, hemisferio_norte, datum)
+        lon, lat = _transformador(epsg).transform(e, n)
+        if lat != lat or lon != lon:  # NaN -> fuera de rango para esa zona/datum
+            return None, None
         return lat, lon
-    except Exception:  # noqa: BLE001  (coordenada inválida para la zona, etc.)
+    except Exception:  # noqa: BLE001  (EPSG desconocido, coordenada inválida, etc.)
         return None, None
 
 

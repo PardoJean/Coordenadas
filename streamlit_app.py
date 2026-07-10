@@ -10,7 +10,13 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 
-from topo_parser import ZONA_UTM_DEFECTO, leer_imagen, utm_a_latlon
+from topo_parser import (
+    DATUM_DEFECTO,
+    DATUMS,
+    ZONA_UTM_DEFECTO,
+    leer_imagen,
+    utm_a_latlon,
+)
 
 # ────────────────────────────────────────────────────────────────────────────
 # Configuración
@@ -212,11 +218,13 @@ m2.metric("Campos vacíos", vacios)
 # ────────────────────────────────────────────────────────────────────────────
 # Mapa de ubicación (UTM -> lat/lon)
 # ────────────────────────────────────────────────────────────────────────────
-def construir_puntos(df_datos: pd.DataFrame, zona: int) -> pd.DataFrame:
+def construir_puntos(df_datos: pd.DataFrame, zona: int, datum: str) -> pd.DataFrame:
     """Convierte X (Este) / Y (Norte) a lat/lon y devuelve solo los válidos."""
     filas = []
     for _, fila in df_datos.iterrows():
-        lat, lon = utm_a_latlon(fila.get("X", ""), fila.get("Y", ""), zona=zona)
+        lat, lon = utm_a_latlon(
+            fila.get("X", ""), fila.get("Y", ""), zona=zona, datum=datum
+        )
         if lat is None or lon is None:
             continue
         filas.append({
@@ -231,13 +239,21 @@ def construir_puntos(df_datos: pd.DataFrame, zona: int) -> pd.DataFrame:
 
 
 st.markdown("### 🗺️ Mapa de ubicación")
-zona = st.number_input(
+cfg1, cfg2 = st.columns(2)
+datum = cfg1.selectbox(
+    "Datum de las coordenadas",
+    options=list(DATUMS),
+    index=list(DATUMS).index(DATUM_DEFECTO),
+    help="Las capturas de topografía en Ecuador suelen estar en PSAD56. Se "
+         "transforma a WGS84 para ubicarlas correctamente sobre el mapa.",
+)
+zona = cfg2.number_input(
     "Zona UTM (Ecuacorriente / Mirador = 17 Sur)",
     min_value=1, max_value=60, value=ZONA_UTM_DEFECTO, step=1,
     help="Todos los puntos se convierten de UTM (hemisferio Sur) a latitud/longitud usando esta zona.",
 )
 
-df_mapa = construir_puntos(df_editado, int(zona))
+df_mapa = construir_puntos(df_editado, int(zona), datum)
 m3.metric("Puntos en el mapa", len(df_mapa))
 
 if df_mapa.empty:
