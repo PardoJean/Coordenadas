@@ -26,6 +26,7 @@
     selectDatum: document.getElementById("select-datum"),
     inputZona: document.getElementById("input-zona"),
     mapaOffline: document.getElementById("mapa-offline"),
+    btnCopiar: document.getElementById("btn-copiar"),
     btnXlsx: document.getElementById("btn-xlsx"),
     btnLimpiar: document.getElementById("btn-limpiar"),
     capasControl: document.getElementById("capas-control"),
@@ -387,6 +388,43 @@
   el.selectDatum.addEventListener("change", renderizarMetricasYMapa);
   el.inputZona.addEventListener("change", renderizarMetricasYMapa);
   el.capasControl.addEventListener("change", renderizarMetricasYMapa);
+
+  // ---- Copiar tabla (pegar directo en Excel/Sheets, sin descargar nada) --
+  // Seleccionar celdas con el mouse no funciona bien porque cada celda es un
+  // <td contenteditable> independiente (el navegador atrapa la selección
+  // dentro de la primera celda). Se arma el texto separado por tabulaciones
+  // (TSV) a mano y se copia con la Clipboard API: Excel/Sheets reconocen ese
+  // formato al pegar y lo acomodan como cuadrícula, una celda por columna.
+  function tablaComoTsv() {
+    const filas = [COLUMNAS.join("\t")];
+    for (const reg of registros) {
+      filas.push(COLUMNAS.map((c) => reg[c] || "").join("\t"));
+    }
+    return filas.join("\r\n");
+  }
+
+  async function copiarTabla() {
+    const texto = tablaComoTsv();
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch (e) {
+      // Respaldo para navegadores sin permiso de portapapeles async
+      const area = document.createElement("textarea");
+      area.value = texto;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      document.body.removeChild(area);
+    }
+    const original = el.btnCopiar.textContent;
+    el.btnCopiar.textContent = "✅ Copiado";
+    setTimeout(() => {
+      el.btnCopiar.textContent = original;
+    }, 1500);
+  }
+  el.btnCopiar.addEventListener("click", copiarTabla);
 
   // ---- XLSX ---------------------------------------------------------
   function descargarXlsx() {

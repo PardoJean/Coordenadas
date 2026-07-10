@@ -4,10 +4,12 @@ Copia una captura de topografía en WhatsApp, pégala y obtén X, Y, COTA y ABS,
 con visualización de los puntos sobre un mapa.
 """
 import io
+import json
 import shutil
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 from topo_parser import (
@@ -201,7 +203,11 @@ if not st.session_state.registros:
     st.stop()
 
 st.subheader("Resultados")
-st.caption("Doble clic en una celda para corregir. Usa la última fila vacía para añadir manualmente.")
+st.caption(
+    "Doble clic en una celda para corregir. Usa la última fila vacía para añadir manualmente. "
+    "También puedes hacer clic y arrastrar para seleccionar celdas y copiarlas con Ctrl+C, "
+    "como en una hoja de Excel."
+)
 
 df = pd.DataFrame(ordenar_registros(st.session_state.registros), columns=COLUMNAS)
 df_editado = st.data_editor(
@@ -329,9 +335,51 @@ else:
 # Descargas
 # ────────────────────────────────────────────────────────────────────────────
 st.divider()
-d1, d2 = st.columns(2)
+d1, d2, d3 = st.columns(3)
 
 with d1:
+    # Botón de copiado explícito (además de la selección nativa de celdas del
+    # editor): arma el texto separado por tabulaciones (TSV) en Python y lo
+    # copia con la Clipboard API, igual que la versión de GitHub Pages
+    # (docs/js/app.js). Excel/Sheets reconocen ese formato al pegar y lo
+    # acomodan como cuadrícula, una celda por columna.
+    filas_tsv = ["\t".join(COLUMNAS)]
+    for _, fila in df_editado.iterrows():
+        filas_tsv.append("\t".join(str(fila.get(c, "") or "") for c in COLUMNAS))
+    tabla_tsv = json.dumps("\r\n".join(filas_tsv))
+    components.html(
+        f"""
+        <button id="btn-copiar" style="
+            width:100%; padding:0.5rem 1rem; border-radius:0.5rem;
+            border:1px solid rgba(49,51,63,0.2); background:#f0f2f6;
+            color:#31333F; font-size:1rem; cursor:pointer;
+        ">📋 Copiar tabla</button>
+        <script>
+        const texto = {tabla_tsv};
+        const boton = document.getElementById("btn-copiar");
+        boton.addEventListener("click", async () => {{
+            try {{
+                await navigator.clipboard.writeText(texto);
+            }} catch (e) {{
+                const area = document.createElement("textarea");
+                area.value = texto;
+                area.style.position = "fixed";
+                area.style.opacity = "0";
+                document.body.appendChild(area);
+                area.select();
+                document.execCommand("copy");
+                document.body.removeChild(area);
+            }}
+            const original = boton.textContent;
+            boton.textContent = "✅ Copiado";
+            setTimeout(() => {{ boton.textContent = original; }}, 1500);
+        }});
+        </script>
+        """,
+        height=45,
+    )
+
+with d2:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df_editado.to_excel(writer, sheet_name="Coordenadas", index=False)
@@ -343,10 +391,12 @@ with d1:
         use_container_width=True,
     )
 
-with d2:
+with d3:
     if st.button("🗑️ Limpiar todo", use_container_width=True):
         st.session_state.registros = []
         st.rerun()
+
+st.caption("\"Copiar tabla\" copia los resultados listos para pegar directo en Excel/Sheets (Ctrl+V), sin descargar ningún archivo.")
 
 st.divider()
 st.caption("Versión 1.0 · © 2026 · Todos los derechos reservados · [GitHub](https://github.com/PardoJean/Coordenadas)")
