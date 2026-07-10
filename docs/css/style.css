@@ -65,6 +65,12 @@ input[type="file"] { display: block; margin-bottom: .8rem; }
 .boton-primario:disabled { background: #cbd5e1; cursor: not-allowed; }
 .boton-secundario { background: #e2e8f0; color: var(--texto); }
 .boton-secundario:hover { background: #cbd5e1; }
+.boton-descarga {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: #fff; font-size: 1.05rem; padding: .7rem 1.5rem; flex: 1;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, .3);
+}
+.boton-descarga:hover { background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%); }
 .boton-peligro { background: #fee2e2; color: var(--rojo); }
 .boton-peligro:hover { background: #fecaca; }
 

@@ -190,9 +190,29 @@
     const mc = up.match(/(?:ELEVACI[ÓO]N|ELEV|COTA)[^\d+-]{0,6}([+-]?\d+(?:[.,]\d+)?)/);
     if (mc) res.COTA = numLimpio(mc[1]);
 
-    let ma = up.match(/EST[\s:.]*K\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)/);
-    if (!ma) ma = up.match(/K\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)/);
+    // 1) "Est:" tolerante a OCR (E5t, Es7...) + K-0+NUMBER
+    let ma = up.match(/E[S5][T7I1L][\s:.]*[Kk]\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)/);
+    // 2) Solo K-0+NUMBER (Est muy dañado)
+    if (!ma) ma = up.match(/[Kk<]\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)/);
+    // 3) "Est:" dañado + número directo (OCR perdió "K-0+" pero dejó el valor)
+    if (!ma) ma = up.match(/E[S5][T7I1L][\s:.]*[^K]{0,8}?([+-]?\d{1,4}(?:[.,]\d+)?)/);
     if (ma) res.ABS = procesarAbs(ma[1]);
+    if (!res.ABS) {
+      // 4) Fallback: primer número de 1-4 dígitos enteros plausible como ABS
+      for (const tok of tokens) {
+        const m = tok.match(/([+-]?\d{1,4}(?:[.,]\d{1,3}))/);
+        if (m) {
+          const c = numLimpio(m[1]);
+          if (c) {
+            const entero = c.split(".")[0].replace(/^[+-]/, "");
+            if (entero.length >= 1 && entero.length <= 4) {
+              res.ABS = truncar2(c);
+              break;
+            }
+          }
+        }
+      }
+    }
 
     for (const k of ["X", "Y", "COTA"]) res[k] = truncar2(res[k]);
 

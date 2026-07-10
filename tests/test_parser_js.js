@@ -66,6 +66,13 @@ check("abs K-0+218.161", procesarAbs("K-0+218.161"), "-218.16");
 check("abs K0+154.895", procesarAbs("K0+154.895"), "154.89");
 check("abs con espacios", procesarAbs("K - 0 + 99.999"), "-99.99");
 
+console.log("\n== ABS con ruido de OCR (tokens dañados reales) ==");
+check('E5t: K-0+218.161', extraerCoordenadas(['E5t: K-0+218.161']).ABS, '-218.16');
+check('Est/K separado', extraerCoordenadas(['algo', 'Est', 'K', '-0+', '218.161', 'mas']).ABS, '-218.16');
+check('E5t + numero directo', extraerCoordenadas(['E5t:', '-218.161']).ABS, '-218.16');
+check('Est:< -0+ 154.895', extraerCoordenadas(['Est:< -0+ 154.895']).ABS, '-154.89');
+check('E5T: K0+ 40.883', extraerCoordenadas(['E5T: K0+ 40.883']).ABS, '40.88');
+
 console.log("\n== Conversión UTM -> lat/lon (PSAD56, zona 17 Sur) ==");
 const geoPsad = utmALatLon("780816.71", "9603295.21", { zona: 17, datum: "PSAD56" });
 const geoWgs = utmALatLon("780816.71", "9603295.21", { zona: 17, datum: "WGS84" });

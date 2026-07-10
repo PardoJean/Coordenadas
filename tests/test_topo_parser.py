@@ -171,7 +171,37 @@ def main():
             todo_ok = False
         print(f"  [{estado}] {nombre}: esperado={esp!r} obtenido={got!r}")
 
-    # ---- OCR de extremo a extremo contra capturas reales ----
+    # ---- ABS con OCR dañado (simula errores reales en VDC 3/4) ----
+    print("\n== ABS con ruido de OCR ==")
+    # Caso A: "Est:" leído como "E5t:" (5 en vez de S, t minúscula)
+    got_a = extraer_coordenadas(["E5t: K-0+218.161"])
+    ok_a = got_a.get("ABS") == "-218.16"
+    todo_ok &= ok_a
+    print(f"  [{ 'OK ' if ok_a else 'FALLA'}] E5t:K-0+218.161: esperado='-218.16' obtenido={got_a.get('ABS')!r}")
+
+    # Caso B: OCR separó Est y K en diferentes tokens
+    got_b = extraer_coordenadas(["algo", "Est", "K", "-0+", "218.161", "mas"])
+    ok_b = got_b.get("ABS") == "-218.16"
+    todo_ok &= ok_b
+    print(f"  [{ 'OK ' if ok_b else 'FALLA'}] Est/K separado: esperado='-218.16' obtenido={got_b.get('ABS')!r}")
+
+    # Caso C: "Est:" dañado y sin "K-0+" (solo número firmado)
+    got_c = extraer_coordenadas(["E5t:", "-218.161"])
+    ok_c = got_c.get("ABS") == "-218.16"
+    todo_ok &= ok_c
+    print(f"  [{ 'OK ' if ok_c else 'FALLA'}] E5t + número directo: esperado='-218.16' obtenido={got_c.get('ABS')!r}")
+
+    # Caso D: "Est:" con K leído como "<"
+    got_d = extraer_coordenadas(["Est:< -0+ 154.895"])
+    ok_d = got_d.get("ABS") == "-154.89"
+    todo_ok &= ok_d
+    print(f"  [{ 'OK ' if ok_d else 'FALLA'}] Est:< -0+ 154.895: esperado='-154.89' obtenido={got_d.get('ABS')!r}")
+
+    # Caso E: ABS positivo sin signo, solo K0+
+    got_e = extraer_coordenadas(["E5T: K0+ 40.883"])
+    ok_e = got_e.get("ABS") == "40.88"
+    todo_ok &= ok_e
+    print(f"  [{ 'OK ' if ok_e else 'FALLA'}] E5T: K0+ 40.883: esperado='40.88' obtenido={got_e.get('ABS')!r}")
     # Casos reportados: con el modo de OCR por defecto (--psm automático), el
     # campo "Código" se fusiona con elementos vecinos de la interfaz y
     # Tesseract lo lee como texto irreconocible ("PIE", "NULES"...), dando

@@ -101,6 +101,7 @@ def procesar_abs(crudo):
     """
     'K-0+218.161' -> '-218.16'   (primer signo, se omite el 0 y el segundo signo)
     'K0+154.895'  -> '154.89'
+    '-218.161'    -> '-218.16'   (número firmado directo, sin K-0+)
     """
     if not crudo:
         return ""
@@ -110,7 +111,6 @@ def procesar_abs(crudo):
         signo = m.group(1)
         numero = truncar_2(m.group(2))
         return f"{signo}{numero}" if numero else ""
-    # Respaldo: un número suelto
     n = _num_limpio(s)
     return truncar_2(n) if n else ""
 
@@ -237,11 +237,28 @@ def extraer_coordenadas(tokens):
         res["COTA"] = _num_limpio(mc.group(1))
 
     # ---- ABS (Est:K-0+valor) ----
-    ma = re.search(r"EST[\s:.]*K\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)", up)
+    # 1) "Est:" tolerante a errores OCR (E5t, E$t, Es7...) + K-0+NUMBER
+    ma = re.search(r"E[S5][T7I1L][\s:.]*[Kk]\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)", up)
+    # 2) Solo K-0+NUMBER (Est muy dañado)
     if not ma:
-        ma = re.search(r"K\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)", up)
+        ma = re.search(r"[Kk<]\s*([+-]?\s*0\s*[+-]\s*\d+(?:[.,]\d+)?)", up)
+    # 3) "Est:" dañado + número directo (el OCR perdió "K-0+" pero dejó el valor)
+    if not ma:
+        ma = re.search(r"E[S5][T7I1L][\s:.]*[^K]{0,8}?([+-]?\d{1,4}(?:[.,]\d+)?)", up)
     if ma:
         res["ABS"] = procesar_abs(ma.group(1))
+    if not res["ABS"]:
+        # 4) Fallback: primer número de 1-4 dígitos enteros (plausible como ABS)
+        #    que no sea obviamente una coordenada UTM (>=6 dígitos).
+        for tok in tokens:
+            m = re.search(r"([+-]?\d{1,4}(?:[.,]\d{1,3}))", tok)
+            if m:
+                c = _num_limpio(m.group(1))
+                if c:
+                    entero = c.split(".")[0].lstrip("+-")
+                    if 1 <= len(entero) <= 4:
+                        res["ABS"] = truncar_2(c)
+                        break
 
     # ---- Truncar X, Y, COTA a 2 decimales ----
     for k in ("X", "Y", "COTA"):
