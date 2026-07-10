@@ -11,7 +11,7 @@ global.window = global;
 require(path.join(__dirname, "..", "docs", "js", "parser.js"));
 require(path.join(__dirname, "..", "docs", "js", "geo.js"));
 
-const { parsear, truncar2, procesarAbs, extraerEnsayo, extraerCoordenadas } = global.TopoParser;
+const { parsear, truncar2, procesarAbs, extraerEnsayo, extraerCoordenadas, extraerTipoNumero } = global.TopoParser;
 const { utmALatLon } = global.TopoGeo;
 
 let todoOk = true;
@@ -63,9 +63,18 @@ check("Y (ignora la 'N' de un número corto)", coordsRuido.Y, "9111111.11");
 console.log("\n== Reglas unitarias ==");
 check("truncar 786.719", truncar2("786.719"), "786.71");
 check("truncar -218.169", truncar2("-218.169"), "-218.16");
+check("truncar sin cero a la izquierda 040.886", truncar2("040.886"), "40.88");
+check("truncar '0.5'", truncar2("0.5"), "0.50");
 check("abs K-0+218.161", procesarAbs("K-0+218.161"), "-218.16");
 check("abs K0+154.895", procesarAbs("K0+154.895"), "154.89");
 check("abs con espacios", procesarAbs("K - 0 + 99.999"), "-99.99");
+check("abs K0+040.886 (cero a la izquierda)", procesarAbs("K0+040.886"), "40.88");
+// Regresión: extraerTipoNumero("SIN CLASIFICAR") cortaba en el primer
+// espacio y devolvía "SIN" -> el filtro de capas del mapa (que compara
+// contra el string completo) descartaba en silencio todo punto sin
+// clasificar, aunque tuviera X/Y válidos.
+check("tipo de 'SIN CLASIFICAR'", extraerTipoNumero("SIN CLASIFICAR"), ["SIN CLASIFICAR", 0]);
+check("tipo de 'DCP 1'", extraerTipoNumero("DCP 1"), ["DCP", 1]);
 
 console.log("\n== ABS con ruido de OCR (tokens dañados reales) ==");
 check('E5t: K-0+218.161', extraerCoordenadas(['E5t: K-0+218.161']).ABS, '-218.16');

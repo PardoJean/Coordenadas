@@ -11,6 +11,7 @@ from topo_parser import (
     procesar_abs,
     extraer_ensayo,
     extraer_coordenadas,
+    extraer_tipo_numero,
     leer_imagen,
 )
 
@@ -162,9 +163,21 @@ def main():
     casos = [
         ("truncar sin redondear 786.719", truncar_2("786.719"), "786.71"),
         ("truncar negativo -218.169", truncar_2("-218.169"), "-218.16"),
+        # Regresión: el truncado por string (para evitar errores de precisión
+        # flotante) dejaba el cero a la izquierda sin quitar: "040.886" ->
+        # "040.88" en vez de "40.88".
+        ("truncar sin cero a la izquierda 040.886", truncar_2("040.886"), "40.88"),
+        ("truncar '0' a secas", truncar_2("0.5"), "0.50"),
         ("abs K-0+218.161", procesar_abs("K-0+218.161"), "-218.16"),
         ("abs K0+154.895 (sin primer signo)", procesar_abs("K0+154.895"), "154.89"),
         ("abs con espacios K - 0 + 99.999", procesar_abs("K - 0 + 99.999"), "-99.99"),
+        ("abs K0+040.886 (cero a la izquierda)", procesar_abs("K0+040.886"), "40.88"),
+        # Regresión: extraer_tipo_numero("SIN CLASIFICAR") cortaba en el
+        # primer espacio y devolvía "SIN" -> el filtro de capas del mapa
+        # (que compara contra el string completo) descartaba en silencio
+        # todo punto sin clasificar, aunque tuviera X/Y válidos.
+        ("tipo de 'SIN CLASIFICAR'", extraer_tipo_numero("SIN CLASIFICAR"), ("SIN CLASIFICAR", 0)),
+        ("tipo de 'DCP 1'", extraer_tipo_numero("DCP 1"), ("DCP", 1)),
     ]
     for nombre, got, esp in casos:
         estado = "OK " if got == esp else "FALLA"
