@@ -19,8 +19,13 @@
   };
   const SIMBOLOGIA_SIN = { color: [149, 165, 166], radio: 6, marcador: "hollow" };
 
+  // El caso "SIN CLASIFICAR" se compara primero completo: el regex genérico
+  // de abajo, aplicado a ese literal, se detendría en el primer espacio y
+  // devolvería solo "SIN" -> el filtro de capas del mapa (que compara contra
+  // el string completo) nunca haría match y esos puntos desaparecerían del
+  // mapa sin avisar, aunque tuvieran X/Y válidos.
   function extraerTipoNumero(ensayo) {
-    if (!ensayo) return ["SIN CLASIFICAR", 0];
+    if (!ensayo || ensayo.trim().toUpperCase() === "SIN CLASIFICAR") return ["SIN CLASIFICAR", 0];
     const m = ensayo.trim().match(/^([A-Za-z]+)\s*(\d*)/);
     if (m) {
       const tipo = m[1].toUpperCase();
@@ -59,11 +64,15 @@
     /* Trunca a 2 decimales sin redondear. Usa string para evitar errores
        de precisión flotante (1177.600*100 → 117759.999 → Math.trunc → 1177.59). */
     if (valor === null || valor === undefined || valor === "") return "";
-    const s = String(valor).replace(/\s/g, "").replace(",", ".");
+    let s = String(valor).replace(/\s/g, "").replace(",", ".");
     if (!/^-?\d+(\.\d+)?$/.test(s)) return "";
+    const signo = s.startsWith("-") ? "-" : "";
+    if (signo) s = s.slice(1);
     const dot = s.indexOf(".");
-    if (dot === -1) return s + ".00";
-    return s.slice(0, dot) + "." + (s.slice(dot + 1) + "00").slice(0, 2);
+    let entero = dot === -1 ? s : s.slice(0, dot);
+    const decimales = dot === -1 ? "" : s.slice(dot + 1);
+    entero = entero.replace(/^0+/, "") || "0";
+    return `${signo}${entero}.${(decimales + "00").slice(0, 2)}`;
   }
 
   function numLimpio(texto) {

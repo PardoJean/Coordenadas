@@ -31,8 +31,13 @@ _SIMBOLOGIA_SIN = {"color": (149, 165, 166), "radio": 6, "marcador": "o"}
 
 
 def extraer_tipo_numero(ensayo):
-    """Separa 'POZO 1' → ('POZO', 1), 'SIN CLASIFICAR' → ('SIN', 0)."""
-    if not ensayo:
+    """Separa 'POZO 1' → ('POZO', 1), 'SIN CLASIFICAR' → ('SIN CLASIFICAR', 0).
+    El caso "SIN CLASIFICAR" se compara primero completo: el regex genérico
+    de abajo, aplicado a ese literal, se detendría en el primer espacio y
+    devolvería solo 'SIN' -> el filtro de capas del mapa (que compara contra
+    el string completo) nunca haría match y esos puntos desaparecerían del
+    mapa sin avisar, aunque tuvieran X/Y válidos."""
+    if not ensayo or ensayo.strip().upper() == "SIN CLASIFICAR":
         return "SIN CLASIFICAR", 0
     m = re.match(r"([A-Za-z]+)\s*(\d*)", ensayo.strip())
     if m:
@@ -81,10 +86,12 @@ def truncar_2(valor):
         s = str(valor).replace(" ", "").replace(",", ".")
         if not re.match(r"^-?\d+(\.\d+)?$", s):
             return ""
+        signo = "-" if s.startswith("-") else ""
+        s = s[1:] if signo else s
         dot = s.find(".")
-        if dot == -1:
-            return s + ".00"
-        return s[:dot] + "." + (s[dot + 1:] + "00")[:2]
+        entero, decimales = (s, "") if dot == -1 else (s[:dot], s[dot + 1:])
+        entero = entero.lstrip("0") or "0"
+        return f"{signo}{entero}.{(decimales + '00')[:2]}"
     except (ValueError, TypeError):
         return ""
 
